@@ -21,18 +21,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     output_path_arg.push(output_dir_name);
 
+    // TODO: Pre-check input file count, sizes, and permissions and warn user of any potential issues. Then ask user if they want to start the copy
+
+    let output_path_root = output_path_arg
+        .to_str()
+        .ok_or("Error: destination path is not valid unicode")?;
+    let mut dest_path = String::with_capacity(output_path_root.len());
+
     for l in std::fs::read_to_string(input_file_arg)?.lines() {
         if l.is_empty() {
             continue;
         }
 
-        let source_path = l.replace(':', "");
-        let mut dest_path = output_path_arg
-            .clone()
-            .to_str()
-            .ok_or("Error: destination path is not valid unicode")?
-            .to_string();
-        dest_path.push_str(source_path.as_str());
+        // TODO: Check to make sure all source paths start with a drive letter
+        // TODO: Ask user if they want to continue when encountering an error instead of exiting the program
+        dest_path.clear();
+        dest_path.push_str(output_path_root);
+        dest_path.push_str(&l[..1]);
+        dest_path.push_str(&l[2..]);
 
         let status = Command::new("robocopy")
             .args([
