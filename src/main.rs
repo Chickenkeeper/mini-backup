@@ -62,16 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let status = Command::new("robocopy")
             .args([input_path.as_os_str(), dest_path.as_os_str()])
-            .args([
-                "/S",
-                "/E",
-                "/COPYALL",
-                "/DCOPY:DAT",
-                "/xj",
-                "/eta",
-                "/R:10",
-                "/W:5",
-            ])
+            .args(["/S", "/E", "/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
             .status()?
             .code()
             .expect("Error: no exit code returned");
