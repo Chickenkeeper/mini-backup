@@ -17,7 +17,7 @@ mini-backup expects two arguments:
 
 ## Important Notes
 
-- All directories in the list of directories must be full paths starting at the drive letter, and must be valid unicode. Newlines seperating chunks of directories are accepted.
+- All directories in the list of directories must be full paths starting at the drive letter. Newlines seperating chunks of directories are accepted.
 - Any issue during the backup process will cause mini-backup to exit, which may leave incomplete files. The backup can be reattempted immediately and will automatically skip files that have already been copied, but incomplete copies may not be repaired so it's best to delete the previous attempt before trying again.
 - The default progress output of robocopy is piped straight to the terminal, which can cause a lot of clutter.
 - An administrator command line may be needed to copy some files and permissions.
