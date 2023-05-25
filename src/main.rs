@@ -1,5 +1,6 @@
 use chrono::{Datelike, Local};
 use std::{
+    io::stdin,
     path::{Component, PathBuf, Prefix},
     process::Command,
 };
@@ -25,43 +26,98 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         date.year()
     ));
 
-    // TODO: Pre-check input file count, sizes, and permissions, and warn user of any potential issues. Then ask user if they want to start the copy
+    // TODO: Pre-check directory size, file count, and subdirectory permissions
+    println!("Checking source paths...");
+    let mut source_paths = Vec::new();
+    let mut dest_paths = Vec::new();
+    let mut error_found = false;
 
-    // Iterate over input paths, copying them to their respective destination paths
-    // TODO: Ask user if they want to continue when encountering an error instead of exiting the program
-    let mut dest_path = PathBuf::new();
-
-    for l in std::fs::read_to_string(input_file_path)?.lines() {
-        if l.is_empty() {
+    for line in std::fs::read_to_string(&input_file_path)?.lines() {
+        if line.is_empty() {
             continue;
         }
 
-        dest_path.clear();
-        dest_path.push(&output_path);
+        let source_path = PathBuf::from(line);
 
-        let input_path = PathBuf::from(l);
-        let mut input_path_iter = input_path.components();
-
-        // Extract the drive letter and append it to the destination path
-        if let Some(drive) = input_path_iter.next() {
-            if let Component::Prefix(p) = drive {
-                if let Prefix::Disk(d) | Prefix::VerbatimDisk(d) = p.kind() {
-                    dest_path.push(String::from(d as char));
-                } else {
-                    return Err("Input paths must begin with a drive letter")?;
+        // Check to make sure source path can be read and isn't a symlink
+        match source_path.symlink_metadata() {
+            Ok(m) => {
+                if m.is_symlink() {
+                    println!("Error reading \"{}\": cannot copy symlinks", line);
+                    error_found = true;
+                    continue;
                 }
-            } else {
-                return Err("Input paths must begin with a drive letter")?;
+            }
+            Err(e) => {
+                println!("Error reading \"{}\": {}", line, e);
+                error_found = true;
+                continue;
             }
         }
 
+        let mut source_path_iter = source_path.components();
+        let mut dest_path = output_path.clone();
+        let mut has_drive_letter = false;
+
+        // Extract the drive letter and append it to the destination path
+        if let Some(drive) = source_path_iter.next() {
+            if let Component::Prefix(p) = drive {
+                if let Prefix::Disk(d) | Prefix::VerbatimDisk(d) = p.kind() {
+                    dest_path.push(String::from(d as char));
+                    has_drive_letter = true;
+                }
+            }
+        }
+
+        if !has_drive_letter {
+            println!(
+                "Error reading \"{}\": source paths must begin with a drive letter",
+                line
+            );
+            error_found = true;
+            continue;
+        }
+
         // Skip the root component so destination path doesn't get overridden, then append the rest of the input path
-        for c in input_path_iter.skip(1) {
+        for c in source_path_iter.skip(1) {
             dest_path.push(c);
         }
 
+        source_paths.push(source_path);
+        dest_paths.push(dest_path);
+    }
+
+    if error_found {
+        println!("\nWarning: errors found, affected paths will be skipped");
+    } else {
+        println!("\nAll source paths ok");
+    }
+
+    // Ask user to confirm before proceeding
+    println!(
+        "\nAre you sure you want to backup the paths in \"{}\" to \"{}\"? (y/n)",
+        input_file_path.display(),
+        output_path.display(),
+    );
+    let mut buf = String::new();
+    loop {
+        stdin().read_line(&mut buf)?;
+
+        match buf.trim_end() {
+            "y" | "Y" => break,
+            "n" | "N" => {
+                println!("Program quit");
+                return Ok(());
+            }
+            _ => println!("Unrecognised input"),
+        }
+        buf.clear();
+    }
+
+    // Iterate over source paths, copying them to their respective destination paths
+    for (source, dest) in source_paths.iter().zip(dest_paths.iter()) {
         let status = Command::new("robocopy")
-            .args([input_path.as_os_str(), dest_path.as_os_str()])
+            .args([source, dest])
             .args(["/S", "/E", "/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
             .status()?
             .code()
