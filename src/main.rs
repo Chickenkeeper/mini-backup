@@ -37,7 +37,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        let source_path = PathBuf::from(line);
+        // if path is relative convert it to an absolute path
+        let source_path = match PathBuf::from(line).canonicalize() {
+            Ok(p) => p,
+            Err(e) => {
+                println!("Error reading \"{}\": {}", line, e);
+                error_found = true;
+                continue;
+            }
+        };
 
         // Check to make sure source path can be read and isn't a symlink
         match source_path.symlink_metadata() {

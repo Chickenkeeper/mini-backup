@@ -6,7 +6,7 @@ A super simple command line backup utility for Windows.
 
 mini-backup expects two arguments:
 
-1. A path to a text file containing a list of full paths to files and/or folders to back up
+1. A path to a text file containing a list of paths to files and/or folders to back up
 2. A path to a folder where the backup will be created
 
 ## Behaviour
@@ -17,7 +17,7 @@ mini-backup expects two arguments:
 
 ## Important Notes
 
-- All directories in the list of directories must be full paths starting at the drive letter. Newlines will be skipped, so can be used to visually seperate chunks of directories.
+- Each path in the list of paths to back up may be absolute or relative. Newlines will be skipped, so can be used to visually separate groups of paths.
 - Any issue during the backup process will cause mini-backup to exit, which may leave incomplete files. The backup can be reattempted immediately and will automatically skip files that have already been copied, but incomplete copies may not be repaired so it's best to delete the previous attempt before trying again.
 - The default progress output of robocopy is piped straight to the terminal, which can cause a lot of clutter.
 - Administrator privileges may be needed to copy some files and permissions.
