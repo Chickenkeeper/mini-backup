@@ -37,15 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        // if path is relative convert it to an absolute path
-        let source_path = match PathBuf::from(line).canonicalize() {
-            Ok(p) => p,
-            Err(e) => {
-                println!("Error reading \"{}\": {}", line, e);
-                error_found = true;
-                continue;
-            }
-        };
+        let mut source_path = PathBuf::from(line);
 
         // Check to make sure source path can be read and isn't a symlink
         match source_path.symlink_metadata() {
@@ -62,6 +54,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
         }
+
+        // if path is relative convert it to an absolute path
+        source_path = match PathBuf::from(line).canonicalize() {
+            Ok(p) => p,
+            Err(e) => {
+                println!("Error reading \"{}\": {}", line, e);
+                error_found = true;
+                continue;
+            }
+        };
 
         let mut source_path_iter = source_path.components();
         let mut dest_path = output_path.clone();
