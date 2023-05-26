@@ -30,6 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Checking source paths...");
     let mut source_paths = Vec::new();
     let mut dest_paths = Vec::new();
+    let mut file_names = Vec::new();
     let mut error_found = false;
 
     for line in std::fs::read_to_string(&input_file_path)?.lines() {
@@ -40,24 +41,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut source_path = PathBuf::from(line);
 
         // Check to make sure source path can be read and isn't a symlink
-        match source_path.symlink_metadata() {
-            Ok(m) => {
-                if m.is_symlink() {
-                    println!("Error reading \"{}\": cannot copy symlinks", line);
-                    error_found = true;
-                    continue;
-                }
-            }
-            Err(e) => {
-                println!("Error reading \"{}\": {}", line, e);
-                error_found = true;
-                continue;
-            }
-        }
-
-        // if path is relative convert it to an absolute path
-        source_path = match PathBuf::from(line).canonicalize() {
-            Ok(p) => p,
+        let source_metadata = match source_path.symlink_metadata() {
+            Ok(m) => m,
             Err(e) => {
                 println!("Error reading \"{}\": {}", line, e);
                 error_found = true;
@@ -65,7 +50,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-        let mut source_path_iter = source_path.components();
+        if source_metadata.is_symlink() {
+            println!("Error reading \"{}\": cannot copy symlinks", line);
+            error_found = true;
+            continue;
+        }
+
+        let mut file_name = PathBuf::new();
+
+        // If the path points to a file seperate the file name from the rest of the path so it can be passed as a separate argument into robocopy
+        if source_metadata.is_file() {
+            file_name.push(source_path.file_name().unwrap_or_default());
+            source_path.pop();
+        }
+
+        // if the source path is relative convert it to an absolute path before appending it to the destination path
+        let abs_source_path = match source_path.clone().canonicalize() {
+            Ok(p) => p,
+            Err(e) => {
+                println!("Error reading \"{}\": {}", line, e);
+                error_found = true;
+                continue;
+            }
+        };
+        let mut source_path_iter = abs_source_path.components();
         let mut dest_path = output_path.clone();
         let mut has_drive_letter = false;
 
@@ -81,20 +89,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if !has_drive_letter {
             println!(
-                "Error reading \"{}\": source paths must begin with a drive letter",
+                "Error reading \"{}\": absolute paths must begin with a drive letter",
                 line
             );
             error_found = true;
             continue;
         }
 
-        // Skip the root component so destination path doesn't get overridden, then append the rest of the input path
+        // Skip the root component so the destination path doesn't get overwritten, then append the rest of the source path
         for c in source_path_iter.skip(1) {
             dest_path.push(c);
         }
 
         source_paths.push(source_path);
         dest_paths.push(dest_path);
+        file_names.push(file_name);
     }
 
     if error_found {
@@ -125,13 +134,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Iterate over source paths, copying them to their respective destination paths
-    for (source, dest) in source_paths.iter().zip(dest_paths.iter()) {
-        let status = Command::new("robocopy")
-            .args([source, dest])
-            .args(["/S", "/E", "/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
-            .status()?
-            .code()
-            .expect("Error: no exit code returned");
+    for ((source, dest), file) in source_paths
+        .iter()
+        .zip(dest_paths.iter())
+        .zip(file_names.iter())
+    {
+        let status;
+
+        if *file == PathBuf::new() {
+            status = Command::new("robocopy")
+                .args([source, dest])
+                .args(["/S", "/E", "/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
+                .status()?
+                .code()
+                .expect("Error: no exit code returned");
+        } else {
+            status = Command::new("robocopy")
+                .args([source, dest, file])
+                .args(["/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
+                .status()?
+                .code()
+                .expect("Error: no exit code returned");
+        }
 
         if status >= 8 {
             return Err(format!("Warning: errors during copy, exit code: {status}"))?;
