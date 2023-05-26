@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => Err("Missing output path"),
     }?;
 
-    // Append backup folder to output path
+    // Append the backup folder to the output path
     let date = Local::now();
     output_path.push(format!(
         "Backup {:02}-{:02}-{}",
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut source_path = PathBuf::from(line);
 
-        // Check to make sure source path can be read and isn't a symlink
+        // Check to make sure the source path can be read and isn't a symlink
         let source_metadata = match source_path.symlink_metadata() {
             Ok(m) => m,
             Err(e) => {
@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut file_name = PathBuf::new();
 
-        // If the path points to a file seperate the file name from the rest of the path so it can be passed as a separate argument into robocopy
+        // If the path points to a file separate the file name from the rest of the path so it can be passed as a separate argument into robocopy
         if source_metadata.is_file() {
             file_name.push(source_path.file_name().unwrap_or_default());
             source_path.pop();
@@ -133,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         buf.clear();
     }
 
-    // Iterate over source paths, copying them to their respective destination paths
+    // Iterate over the source paths, copying them to their respective destination paths
     for ((source, dest), file) in source_paths
         .iter()
         .zip(dest_paths.iter())
