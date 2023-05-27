@@ -1,6 +1,9 @@
+mod backup_core;
+
+use backup_core::{FileSize, ReadSubDir};
 use chrono::{Datelike, Local};
 use std::{
-    io::stdin,
+    io,
     path::{Component, PathBuf, Prefix},
     process::Command,
 };
@@ -26,12 +29,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         date.year()
     ));
 
-    // TODO: Pre-check directory size, file count, and subdirectory permissions
     println!("Checking source paths...");
     let mut source_paths = Vec::new();
     let mut dest_paths = Vec::new();
     let mut file_names = Vec::new();
     let mut error_found = false;
+    let mut byte_count = 0;
+    let mut file_count = 0;
+    let mut folder_count = 0;
+    let mut error_count = 0;
 
     for line in std::fs::read_to_string(&input_file_path)?.lines() {
         if line.is_empty() {
@@ -44,15 +50,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let source_metadata = match source_path.symlink_metadata() {
             Ok(m) => m,
             Err(e) => {
-                println!("Error reading \"{}\": {}", line, e);
+                println!("Error: {}. Path: \"{}\"", e, line);
                 error_found = true;
+                error_count += 1;
                 continue;
             }
         };
 
         if source_metadata.is_symlink() {
-            println!("Error reading \"{}\": cannot copy symlinks", line);
+            println!("Error: Cannot copy symlinks. Path: \"{}\"", line);
             error_found = true;
+            error_count += 1;
             continue;
         }
 
@@ -68,8 +76,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let abs_source_path = match source_path.clone().canonicalize() {
             Ok(p) => p,
             Err(e) => {
-                println!("Error reading \"{}\": {}", line, e);
+                println!("Error: {}. Path: \"{}\"", e, line);
                 error_found = true;
+                error_count += 1;
                 continue;
             }
         };
@@ -89,10 +98,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if !has_drive_letter {
             println!(
-                "Error reading \"{}\": absolute paths must begin with a drive letter",
+                "Error: Absolute paths must begin with a drive letter. Path: \"{}\"",
                 line
             );
             error_found = true;
+            error_count += 1;
             continue;
         }
 
@@ -101,10 +111,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             dest_path.push(c);
         }
 
+        for entry_r in ReadSubDir::new(source_path.to_owned()) {
+            let entry = match entry_r {
+                Ok(entry) => entry,
+                Err(e) => {
+                    println!("Error: {}", e);
+                    error_found = true;
+                    error_count += 1;
+                    continue;
+                }
+            };
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("Error: \"{}\". Path: {}", e, entry.path().display());
+                    error_found = true;
+                    error_count += 1;
+                    continue;
+                }
+            };
+
+            byte_count += meta.len();
+            if meta.is_dir() {
+                folder_count += 1;
+            } else if meta.is_file() {
+                file_count += 1;
+            }
+        }
+
         source_paths.push(source_path);
         dest_paths.push(dest_path);
         file_names.push(file_name);
     }
+
+    let total_size = FileSize::from_byte_count(byte_count);
+
+    println!(
+        "\nSize: {} {}, Files: {}, Folders: {}, Errors: {}",
+        total_size.value, total_size.units, file_count, folder_count, error_count
+    );
 
     if error_found {
         println!("\nWarning: errors found, affected paths will be skipped");
@@ -120,7 +165,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut buf = String::new();
     loop {
-        stdin().read_line(&mut buf)?;
+        io::stdin().read_line(&mut buf)?;
 
         match buf.trim_end() {
             "y" | "Y" => break,
