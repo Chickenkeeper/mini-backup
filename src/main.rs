@@ -33,7 +33,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut source_paths = Vec::new();
     let mut dest_paths = Vec::new();
     let mut file_names = Vec::new();
-    let mut error_found = false;
     let mut byte_count = 0;
     let mut file_count = 0;
     let mut folder_count = 0;
@@ -51,7 +50,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(m) => m,
             Err(e) => {
                 println!("Error: {}. Path: \"{}\"", e, line);
-                error_found = true;
                 error_count += 1;
                 continue;
             }
@@ -59,7 +57,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if source_metadata.is_symlink() {
             println!("Error: Cannot copy symlinks. Path: \"{}\"", line);
-            error_found = true;
             error_count += 1;
             continue;
         }
@@ -77,7 +74,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(p) => p,
             Err(e) => {
                 println!("Error: {}. Path: \"{}\"", e, line);
-                error_found = true;
                 error_count += 1;
                 continue;
             }
@@ -101,7 +97,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "Error: Absolute paths must begin with a drive letter. Path: \"{}\"",
                 line
             );
-            error_found = true;
             error_count += 1;
             continue;
         }
@@ -116,7 +111,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(entry) => entry,
                 Err(e) => {
                     println!("Error: {}", e);
-                    error_found = true;
                     error_count += 1;
                     continue;
                 }
@@ -125,7 +119,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(m) => m,
                 Err(e) => {
                     println!("Error: \"{}\". Path: {}", e, entry.path().display());
-                    error_found = true;
                     error_count += 1;
                     continue;
                 }
@@ -151,7 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         total_size.value, total_size.units, file_count, folder_count, error_count
     );
 
-    if error_found {
+    if error_count > 0 {
         println!("\nWarning: errors found, affected paths will be skipped");
     } else {
         println!("\nAll source paths ok");
