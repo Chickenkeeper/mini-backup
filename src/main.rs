@@ -1,6 +1,6 @@
 mod backup_core;
 
-use backup_core::{FileSize, ReadSubDir};
+use backup_core::{BackupError, BackupErrorKind, FileSize, ReadSubDir};
 use chrono::{Datelike, Local};
 use std::{
     io,
@@ -49,14 +49,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let source_metadata = match source_path.symlink_metadata() {
             Ok(m) => m,
             Err(e) => {
-                println!("Error: {}. Path: \"{}\"", e, line);
+                println!("{}", BackupError::new(e.into(), source_path));
                 error_count += 1;
                 continue;
             }
         };
 
         if source_metadata.is_symlink() {
-            println!("Error: Cannot copy symlinks. Path: \"{}\"", line);
+            println!(
+                "{}",
+                BackupError::new(BackupErrorKind::IsSymlink, source_path)
+            );
             error_count += 1;
             continue;
         }
@@ -73,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let abs_source_path = match source_path.clone().canonicalize() {
             Ok(p) => p,
             Err(e) => {
-                println!("Error: {}. Path: \"{}\"", e, line);
+                println!("{}", BackupError::new(e.into(), source_path));
                 error_count += 1;
                 continue;
             }
@@ -94,8 +97,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if !has_drive_letter {
             println!(
-                "Error: Absolute paths must begin with a drive letter. Path: \"{}\"",
-                line
+                "{}",
+                BackupError::new(BackupErrorKind::NoDriveLetter, source_path)
             );
             error_count += 1;
             continue;
@@ -110,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let entry = match entry_r {
                 Ok(entry) => entry,
                 Err(e) => {
-                    println!("Error: {}", e);
+                    println!("{}", e);
                     error_count += 1;
                     continue;
                 }
@@ -118,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let meta = match entry.metadata() {
                 Ok(m) => m,
                 Err(e) => {
-                    println!("Error: \"{}\". Path: {}", e, entry.path().display());
+                    println!("{}", BackupError::new(e.into(), entry.path()));
                     error_count += 1;
                     continue;
                 }
@@ -185,20 +188,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .args(["/S", "/E", "/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
                 .status()?
                 .code()
-                .expect("Error: no exit code returned");
         } else {
             status = Command::new("robocopy")
                 .args([source, dest, file])
                 .args(["/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
                 .status()?
                 .code()
-                .expect("Error: no exit code returned");
         }
 
-        if status >= 8 {
-            return Err(format!("Warning: errors during copy, exit code: {status}"))?;
+        if let Some(code) = status {
+            if code >= 8 {
+                return Err(format!("Warning: Errors during copy, exit code: {}", code))?;
+            } else {
+                println!("Copy complete, exit code: {}", code);
+            }
         } else {
-            println!("Copy complete, exit code: {status}");
+            return Err("Warning: No exit code returned")?;
         }
     }
 
