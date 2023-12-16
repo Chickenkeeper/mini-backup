@@ -1,6 +1,6 @@
 mod backup_core;
 
-use backup_core::{BackupError, BackupErrorKind, FileSize, ReadSubDir};
+use backup_core::{BackupError, BackupErrorKind, FileSize, ReadSubDirMeta};
 use chrono::{Datelike, Local};
 use std::{
     io,
@@ -109,19 +109,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             dest_path.push(c);
         }
 
-        for entry_r in ReadSubDir::new(source_path.to_owned()) {
-            let entry = match entry_r {
+        for meta_r in ReadSubDirMeta::new(source_path.to_owned()) {
+            let meta = match meta_r {
                 Ok(entry) => entry,
                 Err(e) => {
                     println!("{}", e);
-                    error_count += 1;
-                    continue;
-                }
-            };
-            let meta = match entry.metadata() {
-                Ok(m) => m,
-                Err(e) => {
-                    println!("{}", BackupError::new(e.into(), entry.path()));
                     error_count += 1;
                     continue;
                 }
@@ -130,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             byte_count += meta.len();
             if meta.is_dir() {
                 folder_count += 1;
-            } else if meta.is_file() {
+            } else {
                 file_count += 1;
             }
         }
@@ -180,21 +172,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .zip(dest_paths.iter())
         .zip(file_names.iter())
     {
-        let status;
-
-        if *file == PathBuf::new() {
-            status = Command::new("robocopy")
+        let main_args = ["/DCOPY:DAT", "/XA:ST", "/XJ", "/ETA", "/R:10", "/W:5"];
+        let dir_args = ["/S", "/E"];
+        let status = if *file == PathBuf::new() {
+            Command::new("robocopy")
                 .args([source, dest])
-                .args(["/S", "/E", "/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
+                .args(dir_args)
+                .args(main_args)
                 .status()?
                 .code()
         } else {
-            status = Command::new("robocopy")
+            Command::new("robocopy")
                 .args([source, dest, file])
-                .args(["/DCOPY:DAT", "/xj", "/eta", "/R:10", "/W:5"])
+                .args(main_args)
                 .status()?
                 .code()
-        }
+        };
 
         if let Some(code) = status {
             if code >= 8 {

@@ -1,7 +1,8 @@
 use std::{
     fmt,
-    fs::{DirEntry, ReadDir},
+    fs::{Metadata, ReadDir},
     io,
+    os::windows::fs::MetadataExt,
     path::PathBuf,
 };
 
@@ -92,22 +93,22 @@ impl FileSize {
     }
 }
 
-pub struct ReadSubDir {
+pub struct ReadSubDirMeta {
     dirs: Vec<PathBuf>,
     entries: Option<ReadDir>,
 }
 
-impl ReadSubDir {
+impl ReadSubDirMeta {
     pub fn new(path: PathBuf) -> Self {
-        ReadSubDir {
+        ReadSubDirMeta {
             dirs: vec![path.clone()],
             entries: None,
         }
     }
 }
 
-impl Iterator for ReadSubDir {
-    type Item = Result<DirEntry, BackupError>;
+impl Iterator for ReadSubDirMeta {
+    type Item = Result<Metadata, BackupError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -115,19 +116,26 @@ impl Iterator for ReadSubDir {
                 if let Some(entry_r) = entries.next() {
                     match entry_r {
                         Ok(entry) => {
-                            if let Ok(file) = entry.file_type() {
-                                // Symlinks will return false, so will be treated as files and skipped
-                                if file.is_symlink() {
-                                    return Some(Err(BackupError::new(
-                                        BackupErrorKind::IsSymlink,
-                                        entry.path(),
-                                    )));
+                            match entry.metadata() {
+                                Ok(meta) => {
+                                    // Ignore system and temporary files
+                                    if (meta.file_attributes() & 0x104) != 0 {
+                                        continue;
+                                    } else if meta.is_symlink() {
+                                        // Symlinks will return false, so will be treated as files and skipped
+                                        return Some(Err(BackupError::new(
+                                            BackupErrorKind::IsSymlink,
+                                            entry.path(),
+                                        )));
+                                    } else if meta.is_dir() {
+                                        self.dirs.push(entry.path());
+                                    }
+                                    return Some(Ok(meta));
                                 }
-                                if file.is_dir() {
-                                    self.dirs.push(entry.path());
+                                Err(e) => {
+                                    return Some(Err(BackupError::from(BackupErrorKind::Io(e))));
                                 }
                             }
-                            return Some(Ok(entry));
                         }
                         Err(e) => {
                             return Some(Err(BackupError::from(BackupErrorKind::Io(e))));
